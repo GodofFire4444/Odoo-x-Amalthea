@@ -1,25 +1,19 @@
 const express = require('express');
 const router = express.Router();
-const userController = require('../controllers/userController');
+const approvalController = require('../controllers/approvalController');
 const auth = require('../middleware/auth');
 const roleCheck = require('../middleware/roleCheck');
 
 // All routes require authentication
 router.use(auth);
 
-// Get all employees (Admin/Manager)
-router.get('/', roleCheck('admin', 'manager'), userController.getAllEmployees);
+// Approval rules CRUD (Admin only)
+router.get('/rules', roleCheck('admin'), approvalController.getApprovalRules);
+router.post('/rules', roleCheck('admin'), approvalController.createApprovalRule);
+router.put('/rules/:ruleId', roleCheck('admin'), approvalController.updateApprovalRule);
+router.delete('/rules/:ruleId', roleCheck('admin'), approvalController.deleteApprovalRule);
 
-// Get all managers
-router.get('/managers', userController.getManagers);
-
-// Create employee (Admin only)
-router.post('/', roleCheck('admin'), userController.createEmployee);
-
-// Update employee (Admin only)
-router.put('/:userId', roleCheck('admin'), userController.updateEmployee);
-
-// Delete employee (Admin only)
-router.delete('/:userId', roleCheck('admin'), userController.deleteEmployee);
+// Approve/reject expense (Manager/Admin)
+router.post('/expenses/:expenseId', roleCheck('manager', 'admin'), approvalController.processExpense);
 
 module.exports = router;

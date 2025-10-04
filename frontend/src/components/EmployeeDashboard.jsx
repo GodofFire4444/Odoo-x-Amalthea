@@ -12,6 +12,7 @@ const EmployeeDashboard = () => {
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showOCRScanner, setShowOCRScanner] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [ocrExpenseData, setOcrExpenseData] = useState(null);
 
   useEffect(() => {
     loadExpenses();
@@ -36,6 +37,7 @@ const EmployeeDashboard = () => {
 
   const handleOCRComplete = (expenseData) => {
     setShowOCRScanner(false);
+    setOcrExpenseData(expenseData);
     setShowExpenseForm(true);
   };
 
@@ -156,7 +158,8 @@ const EmployeeDashboard = () => {
             }}>
               <ExpenseForm
                 onSubmit={handleExpenseSubmit}
-                onCancel={() => setShowExpenseForm(false)}
+                onCancel={() => { setShowExpenseForm(false); setOcrExpenseData(null); }}
+                initialData={ocrExpenseData}
               />
             </div>
           </div>

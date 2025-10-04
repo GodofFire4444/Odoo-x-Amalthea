@@ -238,6 +238,13 @@ const ExpenseList = () => {
           </table>
         </div>
       )}
+
+      {/* Approval Rules Placeholder */}
+      <div style={{ background: 'white', borderRadius: '1rem', padding: '2rem', textAlign: 'center', color: '#666', marginTop: '2rem' }}>
+        <h2>Approval Rules</h2>
+        <p>Approval rules management coming soon.</p>
+        {/* Implement CRUD for approval rules here */}
+      </div>
     </div>
   );
 };
