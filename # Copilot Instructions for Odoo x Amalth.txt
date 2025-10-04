@@ -1,0 +1,82 @@
+# Copilot Instructions for Odoo x Amalthea Expense Management Frontend
+
+## Big Picture
+
+- **Architecture**: This is a React SPA for an expense management system with role-based dashboards (Admin, Manager, Employee). It communicates with a RESTful backend (see `src/services/api.js`) and uses JWT authentication.
+- **Roles & Flows**:
+  - **Admin**: Manages employees/managers, views all expenses, sets approval rules.
+  - **Manager**: Approves/rejects expenses from subordinates.
+  - **Employee**: Submits expenses (manual or via OCR), views own expenses.
+- **Data Flow**: All API calls are routed through `api.js` (Axios instance with JWT). Auth state is managed via `AuthContext.jsx` and persisted in `localStorage`.
+
+## Developer Workflows
+
+- **Start Dev Server**:  
+  ```sh
+  cd frontend
+  npm install
+  npm start
+  ```
+- **Build for Production**:  
+  ```sh
+  npm run build
+  ```
+- **Lint/Format**:  
+  No custom scripts found; use Prettier/ESLint defaults if present.
+- **Testing**:  
+  No test setup detected; add tests in `src/__tests__` if needed.
+
+## Project-Specific Conventions
+
+- **Role-based Routing**:  
+  Use `<ProtectedRoute allowedRoles={...}>` in `App.jsx` to restrict dashboard access.
+- **API Usage**:  
+  All HTTP requests go through `src/services/api.js` (handles JWT, 401 redirects).
+- **State Management**:  
+  Use React hooks and context (`AuthContext.jsx`). No Redux/MobX.
+- **Styling**:  
+  Inline styles and CSS-in-JS (`<style jsx>` blocks) are used in components.
+- **Country/Currency**:  
+  Country and currency are selected at signup (see `SignUp.jsx`). Currency is fetched from [restcountries.com](https://restcountries.com/).
+- **OCR Integration**:  
+  Employees can scan receipts using Tesseract.js (`OCRScanner.jsx`), which sends parsed text to `/expenses/ocr/parse` for backend extraction.
+
+## Integration Points
+
+- **Backend API**:  
+  Base URL is `http://localhost:5000/api`. Endpoints include `/auth`, `/users`, `/expenses`, `/approvals`.
+- **Auth**:  
+  JWT token is stored in `localStorage` and attached to all requests.
+- **OCR**:  
+  Uses Tesseract.js in-browser, then backend parsing for structured data.
+- **Currency Conversion**:  
+  Handled server-side, but currency selection is available in forms.
+
+## Patterns & Examples
+
+- **Adding Employees**:  
+  Use the form in `EmployeeList.jsx`. Manager assignment is optional.
+- **Expense Submission**:  
+  Use `ExpenseForm.jsx` for manual entry, or `OCRScanner.jsx` for receipt scanning.
+- **Approval Rules**:  
+  Admins configure rules in `ApprovalRules.jsx` (not fully implemented in frontend yet).
+- **Filtering**:  
+  Expense lists support filtering by status, category, and date.
+
+## Key Files
+
+- `src/App.jsx` — Routing and role protection
+- `src/context/AuthContext.jsx` — Auth state and provider
+- `src/services/api.js` — Axios instance, JWT handling
+- `src/components/EmployeeList.jsx` — Employee CRUD
+- `src/components/ExpenseForm.jsx` — Expense submission
+- `src/components/OCRScanner.jsx` — Receipt OCR
+- `src/components/ExpenseList.jsx` — Expense viewing/filtering
+
+---
+
+**If you add new features, follow the patterns above. For any cross-role logic, always check the backend API contract.**
+
+---
+
+Let me know if any section is unclear or if you want more detail on a specific workflow or integration!

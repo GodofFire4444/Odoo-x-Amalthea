@@ -43,11 +43,10 @@ const OCRScanner = ({ onComplete, onCancel }) => {
       );
 
       // Parse OCR text using backend
-      const response = await api.post('/expenses/ocr/parse', { text });
-      const parsedData = response.data.data;
+      const { data: parsed } = await api.post('/expenses/ocr/parse', { text });
+      onComplete(parsed);
 
       alert('Receipt scanned successfully!');
-      onComplete(parsedData);
 
     } catch (error) {
       console.error('OCR error:', error);
