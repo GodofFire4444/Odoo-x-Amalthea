@@ -7,6 +7,8 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+const cors = require('cors');
+app.use(cors()); // allow all origins during dev
 
 
 app.listen(PORT, () => {
