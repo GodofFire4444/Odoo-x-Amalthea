@@ -11,6 +11,11 @@ const expenseSchema = new mongoose.Schema({
     ref: 'Company',
     required: true
   },
+  approvalRule: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ApprovalRule',
+    default: null
+  },
   amount: {
     type: Number,
     required: true
@@ -56,6 +61,14 @@ const expenseSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
+    step: {
+      type: Number,
+      default: 0
+    },
+    stage: {
+      type: String,
+      default: 'workflow'
+    },
     action: {
       type: String,
       enum: ['approved', 'rejected']
@@ -71,7 +84,8 @@ const expenseSchema = new mongoose.Schema({
     default: Date.now
   }
 }, {
-  timestamps: true
+  timestamps: true,
+  optimisticConcurrency: true
 });
 
 module.exports = mongoose.model('Expense', expenseSchema);

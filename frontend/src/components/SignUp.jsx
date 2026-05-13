@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import { authService } from '../services/auth';
 
 const SignUpPage = () => {
@@ -16,6 +17,7 @@ const SignUpPage = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { addToast } = useToast();
 
   useEffect(() => {
     // Fetch countries from API
@@ -56,19 +58,19 @@ const SignUpPage = () => {
     e.preventDefault();
     
     if (!formData.username || !formData.email || !formData.country || !formData.password || !formData.confirmPassword) {
-      alert('Please fill all fields!');
+      addToast({ type: 'warning', title: 'Missing fields', message: 'Complete all sign-up fields before continuing.' });
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match!');
+      addToast({ type: 'warning', title: 'Passwords do not match', message: 'Double-check your password confirmation.' });
       return;
     }
 
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(formData.email)) {
-      alert('Please enter a valid email address!');
+      addToast({ type: 'warning', title: 'Invalid email', message: 'Enter a valid email address before signing up.' });
       return;
     }
 
@@ -82,11 +84,15 @@ const SignUpPage = () => {
       });
       
       login(response.data.user, response.data.token);
-      alert('Account created successfully!');
+      addToast({ type: 'success', title: 'Account created', message: 'Your demo company is ready.' });
       navigate('/');
     } catch (error) {
       console.error('Sign up error:', error);
-      alert(error.response?.data?.message || 'Error creating account');
+      addToast({
+        type: 'error',
+        title: 'Could not create account',
+        message: error.response?.data?.message || 'Try a different username or email.'
+      });
     } finally {
       setLoading(false);
     }
@@ -97,6 +103,9 @@ const SignUpPage = () => {
       <div id="signup_page">
         <h1>Sign Up</h1>
         <h2>Sign up to continue</h2>
+        <p style={{ textAlign: 'center', color: '#666', marginTop: '-0.5rem', marginBottom: '1rem', fontSize: '0.95rem' }}>
+          Demo tip: use the seeded accounts on the sign-in screen if you want the fastest walkthrough.
+        </p>
         
         <form onSubmit={handleSubmit}>
           <label htmlFor="username">Username</label>

@@ -1,37 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import ExpenseForm from './ExpenseForm';
 import OCRScanner from './OCRScanner';
+import AppHeader from './AppHeader';
+import { useToast } from '../context/ToastContext';
 
 const EmployeeDashboard = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { addToast } = useToast();
   const [expenses, setExpenses] = useState([]);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [showOCRScanner, setShowOCRScanner] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [ocrExpenseData, setOcrExpenseData] = useState(null);
 
-  useEffect(() => {
-    loadExpenses();
-  }, []);
-
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     try {
       setLoading(true);
+      setError('');
       const response = await api.get('/expenses');
       setExpenses(response.data.data.expenses);
     } catch (error) {
       console.error('Error loading expenses:', error);
+      const message = error.response?.data?.message || 'Unable to load expenses';
+      setError(message);
+      addToast({ type: 'error', title: 'Expenses failed to load', message });
     } finally {
       setLoading(false);
     }
-  };
+  }, [addToast]);
+
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
 
   const handleExpenseSubmit = () => {
     setShowExpenseForm(false);
+    setOcrExpenseData(null);
     loadExpenses();
   };
 
@@ -39,11 +44,6 @@ const EmployeeDashboard = () => {
     setShowOCRScanner(false);
     setOcrExpenseData(expenseData);
     setShowExpenseForm(true);
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/signin');
   };
 
   const getStatusColor = (status) => {
@@ -55,54 +55,38 @@ const EmployeeDashboard = () => {
     }
   };
 
+  const counts = expenses.reduce((accumulator, expense) => {
+    accumulator[expense.status] = (accumulator[expense.status] || 0) + 1;
+    return accumulator;
+  }, { pending: 0, approved: 0, rejected: 0 });
+
   return (
     <div style={{ fontFamily: 'Montserrat, sans-serif', minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-      <nav style={{
-        backgroundColor: '#333',
-        color: 'white',
-        padding: '1rem 2rem',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Employee Dashboard</h1>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <span>Welcome, {user?.username}</span>
-          <button
-            onClick={() => navigate('/')}
-            style={{
-              backgroundColor: 'transparent',
-              border: '1px solid white',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.5rem',
-              cursor: 'pointer',
-              marginRight: '0.5rem'
-            }}
-          >
-            Home
-          </button>
-          <button
-            onClick={handleLogout}
-            style={{
-              backgroundColor: 'transparent',
-              border: '1px solid white',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.5rem',
-              cursor: 'pointer'
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      </nav>
+      <AppHeader title="Employee Dashboard" subtitle="Submit & track expenses" />
 
       <div style={{ padding: '2rem', maxWidth: '1200px', margin: '0 auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ background: 'rgba(255,255,255,0.86)', padding: '1rem 1.1rem', borderRadius: '1rem', border: '1px solid var(--demo-border)' }}>
+            <div style={{ color: '#64748b', fontSize: '0.82rem', textTransform: 'uppercase', fontWeight: 700 }}>Total expenses</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{expenses.length}</div>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.86)', padding: '1rem 1.1rem', borderRadius: '1rem', border: '1px solid var(--demo-border)' }}>
+            <div style={{ color: '#64748b', fontSize: '0.82rem', textTransform: 'uppercase', fontWeight: 700 }}>Pending</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#d97706' }}>{counts.pending}</div>
+          </div>
+          <div style={{ background: 'rgba(255,255,255,0.86)', padding: '1rem 1.1rem', borderRadius: '1rem', border: '1px solid var(--demo-border)' }}>
+            <div style={{ color: '#64748b', fontSize: '0.82rem', textTransform: 'uppercase', fontWeight: 700 }}>Approved</div>
+            <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#15803d' }}>{counts.approved}</div>
+          </div>
+        </div>
+
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '1rem', marginBottom: '2rem' }}>
           <button
-            onClick={() => setShowExpenseForm(true)}
+            onClick={() => {
+              setOcrExpenseData(null);
+              setShowExpenseForm(true);
+            }}
             style={{
               padding: '1rem 2rem',
               backgroundColor: '#333',
@@ -198,21 +182,39 @@ const EmployeeDashboard = () => {
         {/* Expenses List */}
         <h2 style={{ marginBottom: '1.5rem' }}>My Expenses</h2>
 
+        {error ? (
+          <div style={{
+            marginBottom: '1rem',
+            padding: '0.85rem 1rem',
+            borderRadius: '0.75rem',
+            backgroundColor: '#fdecea',
+            color: '#b42318',
+            border: '1px solid #f5c2c7'
+          }}>
+            {error}
+          </div>
+        ) : null}
+
         {loading ? (
-          <p>Loading...</p>
+          <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '1rem', border: '1px solid #e5e5e5' }}>
+            Loading your expenses...
+          </div>
         ) : expenses.length === 0 ? (
           <div style={{
-            backgroundColor: 'white',
+            background: 'rgba(255,255,255,0.86)',
             padding: '3rem',
-            borderRadius: '1rem',
+            borderRadius: '1.5rem',
             textAlign: 'center',
-            color: '#666'
+            color: '#666',
+            border: '1px solid var(--demo-border)'
           }}>
-            No expenses yet. Submit your first expense!
+            <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>No expenses yet.</div>
+            <div style={{ marginTop: '0.4rem' }}>Submit your first expense or scan a receipt to show the workflow.</div>
           </div>
         ) : (
-          <div style={{ backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div style={{ background: 'rgba(255,255,255,0.86)', borderRadius: '1.5rem', overflow: 'hidden', border: '1px solid var(--demo-border)', boxShadow: 'var(--demo-shadow)' }}>
+            <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px' }}>
               <thead>
                 <tr style={{ backgroundColor: '#333', color: 'white' }}>
                   <th style={{ padding: '1rem', textAlign: 'left' }}>Date</th>
@@ -251,6 +253,7 @@ const EmployeeDashboard = () => {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

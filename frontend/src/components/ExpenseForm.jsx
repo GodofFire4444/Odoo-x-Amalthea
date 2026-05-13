@@ -1,22 +1,73 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { useToast } from '../context/ToastContext';
+
+const DEFAULT_FORM_DATA = {
+  amount: '',
+  currency: 'USD',
+  category: '',
+  description: '',
+  date: new Date().toISOString().split('T')[0],
+  merchant: ''
+};
+
+const DEFAULT_CURRENCIES = ['USD', 'EUR', 'GBP', 'INR', 'JPY'];
+const CATEGORIES = ['Travel', 'Meals', 'Office Supplies', 'Entertainment', 'Accommodation', 'Transportation', 'Other'];
+
+const normalizeDate = (value, fallback) => {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsedDate = new Date(value);
+  return Number.isNaN(parsedDate.getTime()) ? fallback : parsedDate.toISOString().split('T')[0];
+};
+
+const normalizeCurrency = (value, fallback) => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const currency = value.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(currency) ? currency : fallback;
+};
+
+const mergeExpenseData = (currentData, incomingData) => {
+  if (!incomingData) {
+    return currentData;
+  }
+
+  return {
+    ...currentData,
+    amount: incomingData.amount !== undefined && incomingData.amount !== null && incomingData.amount !== ''
+      ? String(incomingData.amount)
+      : currentData.amount,
+    currency: normalizeCurrency(incomingData.currency, currentData.currency),
+    category: CATEGORIES.includes(incomingData.category) ? incomingData.category : currentData.category,
+    description: typeof incomingData.description === 'string' && incomingData.description.trim()
+      ? incomingData.description
+      : currentData.description,
+    date: normalizeDate(incomingData.date, currentData.date),
+    merchant: typeof incomingData.merchant === 'string' && incomingData.merchant.trim()
+      ? incomingData.merchant
+      : currentData.merchant,
+  };
+};
 
 const ExpenseForm = ({ onSubmit, onCancel, initialData = null }) => {
-  const [formData, setFormData] = useState({
-    amount: '',
-    currency: 'USD',
-    category: '',
-    description: '',
-    date: new Date().toISOString().split('T')[0],
-    merchant: ''
-  });
-  const [currencies, setCurrencies] = useState([]);
+  const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
+  const [currencies, setCurrencies] = useState(DEFAULT_CURRENCIES);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { addToast } = useToast();
 
   useEffect(() => {
     loadCurrencies();
+  }, []);
+
+  useEffect(() => {
     if (initialData) {
-      setFormData(initialData);
+      setFormData(prev => mergeExpenseData(prev, initialData));
     }
   }, [initialData]);
 
@@ -24,7 +75,7 @@ const ExpenseForm = ({ onSubmit, onCancel, initialData = null }) => {
     try {
       const response = await fetch('https://restcountries.com/v3.1/all?fields=name,currencies');
       const countries = await response.json();
-      
+
       const currencySet = new Set();
       countries.forEach(country => {
         if (country.currencies) {
@@ -32,10 +83,10 @@ const ExpenseForm = ({ onSubmit, onCancel, initialData = null }) => {
         }
       });
 
-      setCurrencies([...currencySet].sort());
+      setCurrencies(Array.from(new Set([...DEFAULT_CURRENCIES, ...currencySet])).sort());
     } catch (error) {
       console.error('Error loading currencies:', error);
-      setCurrencies(['USD', 'EUR', 'GBP', 'INR', 'JPY']);
+      setCurrencies(DEFAULT_CURRENCIES);
     }
   };
 
@@ -45,27 +96,68 @@ const ExpenseForm = ({ onSubmit, onCancel, initialData = null }) => {
       ...prev,
       [name]: value
     }));
+    if (error) {
+      setError('');
+    }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.amount || !formData.category || !formData.description || !formData.date) {
-      alert('Please fill all required fields');
+    const amount = Number.parseFloat(formData.amount);
+    const selectedDate = new Date(formData.date);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError('Please enter a valid amount greater than zero.');
+      addToast({ type: 'warning', title: 'Check the amount', message: 'Expense amount must be greater than zero.' });
+      return;
+    }
+
+    if (!formData.currency || !/^[A-Z]{3}$/.test(formData.currency)) {
+      setError('Please choose a valid 3-letter currency code.');
+      addToast({ type: 'warning', title: 'Check the currency', message: 'Choose a valid 3-letter currency code.' });
+      return;
+    }
+
+    if (!CATEGORIES.includes(formData.category)) {
+      setError('Please choose a valid expense category.');
+      addToast({ type: 'warning', title: 'Category required', message: 'Pick a valid expense category before submitting.' });
+      return;
+    }
+
+    if (Number.isNaN(selectedDate.getTime())) {
+      setError('Please choose a valid date.');
+      addToast({ type: 'warning', title: 'Check the date', message: 'Choose a valid expense date.' });
+      return;
+    }
+
+    if (!String(formData.description).trim()) {
+      setError('Please enter an expense description.');
+      addToast({ type: 'warning', title: 'Description required', message: 'Add a short description before submitting.' });
       return;
     }
 
     try {
       setLoading(true);
+      setError('');
       await api.post('/expenses', {
         ...formData,
-        amount: parseFloat(formData.amount)
+        amount,
+        currency: formData.currency.toUpperCase(),
+        category: formData.category,
+        description: formData.description.trim(),
+        date: selectedDate.toISOString().split('T')[0]
       });
-      alert('Expense submitted successfully!');
+      addToast({ type: 'success', title: 'Expense submitted', message: 'Your expense is now in the workflow.' });
       onSubmit();
     } catch (error) {
       console.error('Error submitting expense:', error);
-      alert(error.response?.data?.message || 'Error submitting expense');
+      setError(error.response?.data?.message || 'Error submitting expense');
+      addToast({
+        type: 'error',
+        title: 'Submission failed',
+        message: error.response?.data?.message || 'Unable to submit the expense right now.'
+      });
     } finally {
       setLoading(false);
     }
@@ -74,6 +166,32 @@ const ExpenseForm = ({ onSubmit, onCancel, initialData = null }) => {
   return (
     <form onSubmit={handleSubmit} style={{ fontFamily: 'Montserrat, sans-serif' }}>
       <h2 style={{ marginTop: 0 }}>Submit Expense</h2>
+
+      {initialData?.missingFields?.length ? (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.85rem 1rem',
+          borderRadius: '0.75rem',
+          backgroundColor: '#fff8e1',
+          color: '#8a6d3b',
+          border: '1px solid #ffe0a3'
+        }}>
+          OCR filled what it could. Please review the fields below before submitting.
+        </div>
+      ) : null}
+
+      {error ? (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.85rem 1rem',
+          borderRadius: '0.75rem',
+          backgroundColor: '#fdecea',
+          color: '#b42318',
+          border: '1px solid #f5c2c7'
+        }}>
+          {error}
+        </div>
+      ) : null}
 
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>
@@ -138,13 +256,9 @@ const ExpenseForm = ({ onSubmit, onCancel, initialData = null }) => {
           }}
         >
           <option value="">Select Category</option>
-          <option value="Travel">Travel</option>
-          <option value="Meals">Meals</option>
-          <option value="Office Supplies">Office Supplies</option>
-          <option value="Entertainment">Entertainment</option>
-          <option value="Accommodation">Accommodation</option>
-          <option value="Transportation">Transportation</option>
-          <option value="Other">Other</option>
+          {CATEGORIES.map(category => (
+            <option key={category} value={category}>{category}</option>
+          ))}
         </select>
       </div>
 

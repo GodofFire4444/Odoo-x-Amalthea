@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const ExpenseList = () => {
   const [expenses, setExpenses] = useState([]);
@@ -10,12 +11,9 @@ const ExpenseList = () => {
     endDate: ''
   });
   const [loading, setLoading] = useState(true);
+  const { addToast } = useToast();
 
-  useEffect(() => {
-    loadExpenses();
-  }, [filters]);
-
-  const loadExpenses = async () => {
+  const loadExpenses = useCallback(async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
@@ -28,10 +26,20 @@ const ExpenseList = () => {
       setExpenses(response.data.data.expenses);
     } catch (error) {
       console.error('Error loading expenses:', error);
+      addToast({
+        type: 'error',
+        title: 'Could not load expenses',
+        message: error.response?.data?.message || 'Try refreshing the tab.'
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, addToast]);
+
+  // Intentional fetch on filter change.
+  useEffect(() => {
+    loadExpenses();
+  }, [loadExpenses]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;
@@ -180,20 +188,30 @@ const ExpenseList = () => {
 
       {/* Expenses Table */}
       {loading ? (
-        <p>Loading expenses...</p>
+        <div style={{
+          background: 'rgba(255,255,255,0.86)',
+          padding: '2rem',
+          borderRadius: '1.25rem',
+          border: '1px solid var(--demo-border)'
+        }}>
+          Loading expenses...
+        </div>
       ) : expenses.length === 0 ? (
         <div style={{
-          backgroundColor: 'white',
+          background: 'rgba(255,255,255,0.86)',
           padding: '3rem',
-          borderRadius: '1rem',
+          borderRadius: '1.5rem',
           textAlign: 'center',
-          color: '#666'
+          color: '#666',
+          border: '1px solid var(--demo-border)'
         }}>
-          No expenses found
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>No expenses found.</div>
+          <div style={{ marginTop: '0.4rem' }}>Change the filters or create a new expense in the employee flow.</div>
         </div>
       ) : (
-        <div style={{ backgroundColor: 'white', borderRadius: '1rem', overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ background: 'rgba(255,255,255,0.86)', borderRadius: '1.5rem', overflow: 'hidden', border: '1px solid var(--demo-border)', boxShadow: 'var(--demo-shadow)' }}>
+          <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '860px' }}>
             <thead>
               <tr style={{ backgroundColor: '#333', color: 'white' }}>
                 <th style={{ padding: '1rem', textAlign: 'left' }}>Employee</th>
@@ -236,6 +254,7 @@ const ExpenseList = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       )}
     </div>

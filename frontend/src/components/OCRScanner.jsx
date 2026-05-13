@@ -6,6 +6,8 @@ const OCRScanner = ({ onComplete, onCancel }) => {
   const [image, setImage] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef(null);
 
   const handleImageSelect = (e) => {
@@ -21,13 +23,15 @@ const OCRScanner = ({ onComplete, onCancel }) => {
 
   const handleScan = async () => {
     if (!image) {
-      alert('Please select an image first');
+      setErrorMessage('Please select an image first.');
       return;
     }
 
     try {
       setScanning(true);
       setProgress(0);
+      setErrorMessage('');
+      setStatusMessage('Reading receipt image...');
 
       // Perform OCR
       const { data: { text } } = await Tesseract.recognize(
@@ -43,14 +47,19 @@ const OCRScanner = ({ onComplete, onCancel }) => {
       );
 
       // Parse OCR text using backend
+      setStatusMessage('Parsing receipt details...');
       const { data: parsed } = await api.post('/expenses/ocr/parse', { text });
-      onComplete(parsed);
 
-      alert('Receipt scanned successfully!');
+      if (!parsed?.data) {
+        throw new Error('Unable to parse receipt data');
+      }
+
+      onComplete(parsed.data);
 
     } catch (error) {
       console.error('OCR error:', error);
-      alert('Error scanning receipt. Please try again or enter manually.');
+      setErrorMessage(error.response?.data?.message || 'Error scanning receipt. Please try again or enter manually.');
+      setStatusMessage('');
     } finally {
       setScanning(false);
     }
@@ -59,6 +68,32 @@ const OCRScanner = ({ onComplete, onCancel }) => {
   return (
     <div style={{ fontFamily: 'Montserrat, sans-serif' }}>
       <h2 style={{ marginTop: 0 }}>Scan Receipt</h2>
+
+      {errorMessage ? (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.85rem 1rem',
+          borderRadius: '0.75rem',
+          backgroundColor: '#fdecea',
+          color: '#b42318',
+          border: '1px solid #f5c2c7'
+        }}>
+          {errorMessage}
+        </div>
+      ) : null}
+
+      {statusMessage ? (
+        <div style={{
+          marginBottom: '1rem',
+          padding: '0.85rem 1rem',
+          borderRadius: '0.75rem',
+          backgroundColor: '#eef6ff',
+          color: '#1d4ed8',
+          border: '1px solid #bfdbfe'
+        }}>
+          {statusMessage}
+        </div>
+      ) : null}
 
       <div style={{
         border: '2px dashed #ddd',

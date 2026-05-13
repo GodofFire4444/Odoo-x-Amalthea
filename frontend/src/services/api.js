@@ -1,7 +1,18 @@
 import axios from 'axios';
 
+const resolveBaseURL = () => {
+  const configuredBaseURL = process.env.REACT_APP_API_URL?.trim();
+
+  if (configuredBaseURL) {
+    return configuredBaseURL.replace(/\/$/, '');
+  }
+
+  return '/api';
+};
+
 const api = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: resolveBaseURL(),
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json'
   }

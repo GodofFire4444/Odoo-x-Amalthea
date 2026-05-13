@@ -9,25 +9,52 @@ const parseReceiptText = (text) => {
     amount: null,
     date: null,
     merchant: null,
+    currency: null,
     category: 'Other',
-    description: ''
+    description: '',
+    confidence: {
+      amount: false,
+      date: false,
+      merchant: false,
+      currency: false,
+      category: false,
+      overall: 0
+    },
+    missingFields: []
+  };
+
+  const normalizeCurrency = (rawText) => {
+    const upperText = rawText.toUpperCase();
+    if (upperText.includes('€') || upperText.includes('EUR')) return 'EUR';
+    if (upperText.includes('£') || upperText.includes('GBP')) return 'GBP';
+    if (upperText.includes('₹') || upperText.includes('INR')) return 'INR';
+    if (upperText.includes('¥') || upperText.includes('JPY')) return 'JPY';
+    if (upperText.includes('$') || upperText.includes('USD') || upperText.includes('US$')) return 'USD';
+    return null;
   };
 
   try {
     // Extract amount (common patterns: $XX.XX, XX.XX, Total: XX.XX)
     const amountPatterns = [
-      /total[:\s]+\$?(\d+\.?\d*)/i,
-      /amount[:\s]+\$?(\d+\.?\d*)/i,
-      /\$(\d+\.\d{2})/,
-      /(\d+\.\d{2})/
+      /total[:\s]+[\$€£₹¥]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i,
+      /amount[:\s]+[\$€£₹¥]?\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/i,
+      /[\$€£₹¥]\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?)/,
+      /(\d{1,3}(?:,\d{3})*(?:\.\d{2}))/
     ];
 
     for (const pattern of amountPatterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
-        result.amount = parseFloat(match[1]);
+        result.amount = parseFloat(match[1].replace(/,/g, ''));
+        result.confidence.amount = Number.isFinite(result.amount);
         break;
       }
+    }
+
+    const detectedCurrency = normalizeCurrency(text);
+    if (detectedCurrency) {
+      result.currency = detectedCurrency;
+      result.confidence.currency = true;
     }
 
     // Extract date (various formats)
@@ -43,6 +70,7 @@ const parseReceiptText = (text) => {
         const parsedDate = new Date(match[0]);
         if (!isNaN(parsedDate.getTime())) {
           result.date = parsedDate.toISOString().split('T')[0];
+          result.confidence.date = true;
           break;
         }
       }
@@ -52,6 +80,7 @@ const parseReceiptText = (text) => {
     const lines = text.split('\n').filter(line => line.trim());
     if (lines.length > 0) {
       result.merchant = lines[0].trim();
+      result.confidence.merchant = true;
     }
 
     // Determine category based on keywords
@@ -68,6 +97,7 @@ const parseReceiptText = (text) => {
     for (const [category, keywords] of Object.entries(categoryKeywords)) {
       if (keywords.some(keyword => lowerText.includes(keyword))) {
         result.category = category;
+        result.confidence.category = true;
         break;
       }
     }
@@ -78,6 +108,10 @@ const parseReceiptText = (text) => {
     } else {
       result.description = text.substring(0, 100);
     }
+
+    result.missingFields = ['amount', 'date', 'merchant', 'currency'].filter((field) => !result[field]);
+    const recognizedFields = ['amount', 'date', 'merchant', 'currency', 'category'].filter((field) => result[field]);
+    result.confidence.overall = Math.round((recognizedFields.length / 5) * 100);
 
   } catch (error) {
     console.error('Error parsing receipt text:', error);

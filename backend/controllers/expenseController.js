@@ -1,8 +1,56 @@
 const Expense = require('../models/Expense');
+const ApprovalRule = require('../models/ApprovalRule');
 const User = require('../models/User');
 const Company = require('../models/Company');
 const { convertCurrency } = require('../utils/currencyConverter');
 const { parseReceiptText } = require('../utils/ocrService');
+const {
+  buildApprovalSummary,
+  selectApprovalRule,
+} = require('../utils/approvalWorkflow');
+
+const ALLOWED_CATEGORIES = new Set(['Travel', 'Meals', 'Office Supplies', 'Entertainment', 'Accommodation', 'Transportation', 'Other']);
+
+const isValidDate = (value) => {
+  const parsedDate = new Date(value);
+  return !Number.isNaN(parsedDate.getTime());
+};
+
+const normalizeCurrency = (value, fallback = 'USD') => {
+  if (typeof value !== 'string') {
+    return fallback;
+  }
+
+  const normalized = value.trim().toUpperCase();
+  return /^[A-Z]{3}$/.test(normalized) ? normalized : fallback;
+};
+
+const validateExpenseFields = ({ amount, currency, category, description, date }) => {
+  const errors = [];
+
+  const numericAmount = Number.parseFloat(amount);
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+    errors.push('amount');
+  }
+
+  if (!normalizeCurrency(currency, null)) {
+    errors.push('currency');
+  }
+
+  if (!ALLOWED_CATEGORIES.has(category)) {
+    errors.push('category');
+  }
+
+  if (!description || !String(description).trim()) {
+    errors.push('description');
+  }
+
+  if (!isValidDate(date)) {
+    errors.push('date');
+  }
+
+  return errors;
+};
 
 // Create expense
 exports.createExpense = async (req, res) => {
@@ -10,34 +58,53 @@ exports.createExpense = async (req, res) => {
     const { amount, currency, category, description, date, merchant, receipt } = req.body;
 
     // Validate input
-    if (!amount || !currency || !category || !description || !date) {
+    const validationErrors = validateExpenseFields({ amount, currency, category, description, date });
+    if (validationErrors.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide all required fields'
+        message: 'Please provide valid expense details',
+        errors: validationErrors
       });
     }
 
     // Get company currency
     const company = await Company.findById(req.companyId);
+
+    const activeRules = await ApprovalRule.find({
+      company: req.companyId,
+      isActive: true
+    })
+      .populate('approvers.user', 'username email role')
+      .populate('specificApprovers', 'username email role')
+      .sort({ createdAt: 1 });
+
+    const selectedRule = selectApprovalRule(activeRules, Number.parseFloat(amount));
+
+    const normalizedAmount = Number.parseFloat(amount);
+    const normalizedCurrency = normalizeCurrency(currency);
     
     // Convert amount to company currency
-    let convertedAmount = amount;
-    if (currency !== company.currency) {
-      convertedAmount = await convertCurrency(amount, currency, company.currency);
+    let convertedAmount = normalizedAmount;
+    if (normalizedCurrency !== company.currency) {
+      convertedAmount = await convertCurrency(normalizedAmount, normalizedCurrency, company.currency);
     }
 
     // Create expense
+    const approvalRequired = Boolean(selectedRule || req.body.forceManualApproval === true);
+
     const expense = new Expense({
       employee: req.userId,
       company: req.companyId,
-      amount,
-      currency,
+      approvalRule: selectedRule ? selectedRule._id : null,
+      amount: normalizedAmount,
+      currency: normalizedCurrency,
       convertedAmount,
       category,
-      description,
-      date,
+      description: String(description).trim(),
+      date: new Date(date),
       merchant,
-      receipt
+      receipt,
+      status: approvalRequired ? 'pending' : 'approved'
     });
 
     await expense.save();
@@ -81,6 +148,13 @@ exports.getExpenses = async (req, res) => {
     }
 
     const expenses = await Expense.find(query)
+      .populate({
+        path: 'approvalRule',
+        populate: [
+          { path: 'approvers.user', select: 'username email role' },
+          { path: 'specificApprovers', select: 'username email role' }
+        ]
+      })
       .populate('employee', 'username email')
       .populate('approvalHistory.approver', 'username email')
       .sort({ createdAt: -1 });
@@ -110,6 +184,13 @@ exports.getExpense = async (req, res) => {
       company: req.companyId
     })
       .populate('employee', 'username email role')
+      .populate({
+        path: 'approvalRule',
+        populate: [
+          { path: 'approvers.user', select: 'username email role' },
+          { path: 'specificApprovers', select: 'username email role' }
+        ]
+      })
       .populate('approvalHistory.approver', 'username email role');
 
     if (!expense) {
@@ -162,12 +243,24 @@ exports.getPendingApprovals = async (req, res) => {
     }
 
     const expenses = await Expense.find(query)
+      .populate({
+        path: 'approvalRule',
+        populate: [
+          { path: 'approvers.user', select: 'username email role' },
+          { path: 'specificApprovers', select: 'username email role' }
+        ]
+      })
       .populate('employee', 'username email manager')
       .sort({ createdAt: -1 });
 
+    const summarizedExpenses = expenses.map((expense) => ({
+      ...expense.toObject(),
+      approvalSummary: buildApprovalSummary(expense, expense.approvalRule)
+    }));
+
     res.json({
       success: true,
-      data: { expenses }
+      data: { expenses: summarizedExpenses }
     });
 
   } catch (error) {
@@ -235,6 +328,27 @@ exports.updateExpense = async (req, res) => {
         expense[field] = updates[field];
       }
     });
+
+    const updateValidationErrors = validateExpenseFields({
+      amount: expense.amount,
+      currency: expense.currency,
+      category: expense.category,
+      description: expense.description,
+      date: expense.date
+    });
+
+    if (updateValidationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide valid expense details',
+        errors: updateValidationErrors
+      });
+    }
+
+    expense.amount = Number.parseFloat(expense.amount);
+    expense.currency = normalizeCurrency(expense.currency);
+    expense.date = new Date(expense.date);
+    expense.description = String(expense.description).trim();
 
     // Recalculate converted amount if currency or amount changed
     if (updates.amount || updates.currency) {

@@ -1,27 +1,26 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import EmployeeList from './EmployeeList';
 import ApprovalRules from './ApprovalRules';
 import ExpenseList from './ExpenseList';
+import AppHeader from './AppHeader';
+import { useToast } from '../context/ToastContext';
 
 const AdminDashboard = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState('employees');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [stats, setStats] = useState({
     totalEmployees: 0,
     pendingExpenses: 0,
     totalExpenses: 0
   });
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
+      setLoading(true);
+      setError('');
       const [usersRes, expensesRes] = await Promise.all([
         api.get('/users'),
         api.get('/expenses')
@@ -35,69 +34,76 @@ const AdminDashboard = () => {
       });
     } catch (error) {
       console.error('Error loading stats:', error);
+      const message = error.response?.data?.message || 'Unable to load dashboard data';
+      setError(message);
+      addToast({ type: 'error', title: 'Dashboard load failed', message });
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [addToast]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/signin');
-  };
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   return (
     <div style={{ fontFamily: 'Montserrat, sans-serif', minHeight: '100vh', backgroundColor: '#f5f5f5' }}>
-      <nav style={{
-        backgroundColor: '#333',
-        color: 'white',
-        padding: '1rem 2rem',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <h1 style={{ margin: 0, fontSize: '1.5rem' }}>Admin Dashboard</h1>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <span>Welcome, {user?.username}</span>
-          <button
-            onClick={handleLogout}
-            style={{
-              backgroundColor: 'transparent',
-              border: '1px solid white',
-              color: 'white',
-              padding: '0.5rem 1rem',
-              borderRadius: '0.5rem',
-              cursor: 'pointer'
-            }}
-          >
-            Logout
-          </button>
-        </div>
-      </nav>
+      <AppHeader title="Admin Dashboard" subtitle="System settings & oversight" />
 
-      <div style={{ padding: '2rem' }}>
+      <div style={{ padding: '2rem', maxWidth: '1280px', margin: '0 auto' }}>
+        {loading ? (
+          <div style={{
+            background: 'rgba(255,255,255,0.78)',
+            border: '1px solid var(--demo-border)',
+            borderRadius: '1.5rem',
+            padding: '2rem',
+            boxShadow: 'var(--demo-shadow)'
+          }}>
+            Loading dashboard metrics...
+          </div>
+        ) : null}
+
+        {error ? (
+          <div style={{
+            marginBottom: '1.25rem',
+            padding: '0.9rem 1rem',
+            borderRadius: '1rem',
+            background: '#fef2f2',
+            color: '#991b1b',
+            border: '1px solid #fecaca'
+          }}>
+            {error}
+          </div>
+        ) : null}
+
         {/* Stats Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
           <div style={{
-            backgroundColor: 'white',
+            background: 'rgba(255,255,255,0.82)',
             padding: '1.5rem',
-            borderRadius: '1rem',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            borderRadius: '1.5rem',
+            border: '1px solid var(--demo-border)',
+            boxShadow: 'var(--demo-shadow)'
           }}>
             <h3 style={{ margin: '0 0 0.5rem 0', color: '#666', fontSize: '0.9rem' }}>Total Employees</h3>
             <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold' }}>{stats.totalEmployees}</p>
           </div>
           <div style={{
-            backgroundColor: 'white',
+            background: 'rgba(255,255,255,0.82)',
             padding: '1.5rem',
-            borderRadius: '1rem',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            borderRadius: '1.5rem',
+            border: '1px solid var(--demo-border)',
+            boxShadow: 'var(--demo-shadow)'
           }}>
             <h3 style={{ margin: '0 0 0.5rem 0', color: '#666', fontSize: '0.9rem' }}>Pending Expenses</h3>
             <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#ff9800' }}>{stats.pendingExpenses}</p>
           </div>
           <div style={{
-            backgroundColor: 'white',
+            background: 'rgba(255,255,255,0.82)',
             padding: '1.5rem',
-            borderRadius: '1rem',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            borderRadius: '1.5rem',
+            border: '1px solid var(--demo-border)',
+            boxShadow: 'var(--demo-shadow)'
           }}>
             <h3 style={{ margin: '0 0 0.5rem 0', color: '#666', fontSize: '0.9rem' }}>Total Expenses</h3>
             <p style={{ margin: 0, fontSize: '2rem', fontWeight: 'bold', color: '#4caf50' }}>{stats.totalExpenses}</p>

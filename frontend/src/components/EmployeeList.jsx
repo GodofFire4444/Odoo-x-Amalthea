@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
+import { useToast } from '../context/ToastContext';
 
 const EmployeeList = ({ onUpdate }) => {
   const [employees, setEmployees] = useState([]);
   const [managers, setManagers] = useState([]);
   const [isAdding, setIsAdding] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { addToast } = useToast();
   const [newEmployee, setNewEmployee] = useState({
     username: '',
     email: '',
@@ -15,12 +17,7 @@ const EmployeeList = ({ onUpdate }) => {
     isManagerApprover: false
   });
 
-  useEffect(() => {
-    loadEmployees();
-    loadManagers();
-  }, []);
-
-  const loadEmployees = async () => {
+  const loadEmployees = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get('/users');
@@ -31,16 +28,22 @@ const EmployeeList = ({ onUpdate }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [onUpdate]);
 
-  const loadManagers = async () => {
+  const loadManagers = useCallback(async () => {
     try {
       const response = await api.get('/users/managers');
       setManagers(response.data.data.managers);
     } catch (error) {
       console.error('Error loading managers:', error);
     }
-  };
+  }, []);
+
+  // Intentional mount-time fetch; the loaders are memoized for stability.
+  useEffect(() => {
+    loadEmployees();
+    loadManagers();
+  }, [loadEmployees, loadManagers]);
 
   const handleAddClick = () => {
     setIsAdding(true);
@@ -57,13 +60,13 @@ const EmployeeList = ({ onUpdate }) => {
   const handleSave = async () => {
     // Validate all required fields
     if (!newEmployee.username || !newEmployee.email || !newEmployee.password || !newEmployee.role) {
-      alert("Please fill all required fields!");
+      addToast({ type: 'warning', title: 'Missing fields', message: 'Fill the required employee fields first.' });
       return;
     }
 
     try {
       await api.post('/users', newEmployee);
-      alert('Employee created successfully!');
+      addToast({ type: 'success', title: 'Employee created', message: `${newEmployee.username} is ready for the demo.` });
       
       // Reset form
       setNewEmployee({
@@ -78,7 +81,11 @@ const EmployeeList = ({ onUpdate }) => {
       loadEmployees();
     } catch (error) {
       console.error('Error creating employee:', error);
-      alert(error.response?.data?.message || 'Error creating employee');
+      addToast({
+        type: 'error',
+        title: 'Could not create employee',
+        message: error.response?.data?.message || 'Check the form and try again.'
+      });
     }
   };
 
@@ -99,11 +106,11 @@ const EmployeeList = ({ onUpdate }) => {
 
     try {
       await api.delete(`/users/${userId}`);
-      alert('Employee deleted successfully!');
+      addToast({ type: 'success', title: 'Employee deleted', message: 'The user was removed from the company.' });
       loadEmployees();
     } catch (error) {
       console.error('Error deleting employee:', error);
-      alert('Error deleting employee');
+      addToast({ type: 'error', title: 'Delete failed', message: 'Unable to delete this employee right now.' });
     }
   };
 
